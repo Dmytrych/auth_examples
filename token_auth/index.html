@@ -125,10 +125,15 @@
             token = JSON.parse(session).token;
         } catch(e) {}
 
+        console.log(token);
+        const urlCode = new URLSearchParams(window.location.search).get('code');
+
         if (token) {
-            axios.get('/', {
+            console.log("token found", token);
+
+            axios.get('/jwt', {
                 headers: {
-                    Authorization: token
+                    Authorization: `Bearer ${token}`
                 }
             }).then((response) => {
                 const { username } = response.data;
@@ -145,40 +150,50 @@
                     logoutLink.style.opacity = 1;
                 }
             });
+            console.log("Token checked")
+        } else if (urlCode) {
+            console.log("Detected url code")
+            window.history.replaceState({}, document.title, window.location.pathname)
+
+            const details = {
+                grant_type: "authorization_code",
+                client_id: "JIvCO5c2IBHlAe2patn6l6q5H35qxti0",
+                code: urlCode,
+                client_secret: "ZRF8Op0tWM36p1_hxXTU-B0K_Gq_-eAVtlrQpY24CasYiDmcXBhNS6IJMNcz1EgB",
+                redirect_uri: "http://localhost:3000/",
+                audience: "https://kpi.eu.auth0.com/api/v2/"
+            }
+            const params = new URLSearchParams();
+            Object.entries(details).forEach(([key, value]) => params.append(key, value))
+
+            axios.post(`https://kpi.eu.auth0.com/oauth/token`, params, {
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+            }).then((tokenResponse) => {
+                console.log("Token data", tokenResponse.data)
+
+                if (tokenResponse.data){
+                    sessionStorage.setItem('session', JSON.stringify({
+                        token: tokenResponse.data.access_token,
+                        ...tokenResponse.data
+                    }));
+                }
+
+                location.reload();
+            });
+        } else {
+            console.log("redirecting")
+            window.location.replace(`https://kpi.eu.auth0.com/authorize?response_type=code&client_id=JIvCO5c2IBHlAe2patn6l6q5H35qxti0&connection=Username-Password-Authentication&redirect_uri=http://localhost:3000/&audience=https://kpi.eu.auth0.com/api/v2/`);
         }
 
 
         const loginForm = document.getElementById("login-form");
+
+        loginForm.op
+
         const loginButton = document.getElementById("login-form-submit");
         const loginErrorMsg = document.getElementById("login-error-msg");
         const logoutLink =  document.getElementById("logout");
-
-        logoutLink.addEventListener("click", (e) => {
-            e.preventDefault();
-            sessionStorage.removeItem('session');
-            location.reload();
-        });
-
-        loginButton.addEventListener("click", (e) => {
-            e.preventDefault();
-            const login = loginForm.login.value;
-            const password = loginForm.password.value;
-
-
-            axios({
-                method: 'post',
-                url: '/api/login',
-                data: {
-                    login,
-                    password
-                }
-            }).then((response) => {
-                const { username } =  response.data;
-                sessionStorage.setItem('session', JSON.stringify(response.data));
-                location.reload();
-            }).catch((response) => {
-                loginErrorMsg.style.opacity = 1;
-            });
-        })
     </script>
 </html>

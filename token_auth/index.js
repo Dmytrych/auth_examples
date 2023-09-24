@@ -10,6 +10,9 @@ import {configDotenv} from "dotenv";
 
 configDotenv();
 import express from "express";
+import jwksRsa from "jwks-rsa";
+import {expressjwt} from "express-jwt";
+import {auth} from "express-oauth2-jwt-bearer";
 
 const app = express();
 app.use(bodyParser.json());
@@ -26,30 +29,10 @@ const users = [
 
 const SESSION_KEY = 'Authorization';
 
-const auth = async (username, password) => {
-    const details = {
-        grant_type: "http://auth0.com/oauth/grant-type/password-realm",
-        client_id: process.env.CLIENT_ID,
-        username: username,
-        password: password,
-        audience: process.env.AUDIENCE,
-        client_secret: process.env.CLIENT_SECRET,
-        scope: "openid",
-        realm: "Username-Password-Authentication"
-    }
-    const params = new URLSearchParams();
-    Object.entries(details).forEach(([key, value]) => params.append(key, value))
-
-    console.log(params);
-
-    const tokenResponse = await axios.post(`${process.env.OAUTH_URL}/oauth/token`, params, {
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-    });
-    console.log("Got the token response: " + JSON.stringify(tokenResponse.data))
-    return tokenResponse.data;
-}
+const checkJwt = auth({
+    audience: process.env.AUDIENCE,
+    issuerBaseURL: `${process.env.OAUTH_URL}/`,
+});
 
 app.use(async (req, res, next) => {
     let authorizationHeader = req.get(SESSION_KEY);
@@ -58,6 +41,8 @@ app.use(async (req, res, next) => {
         return next();
     }
     const accessToken = authorizationHeader;
+
+    console.log(authorizationHeader);
 
     const payload = await verifyToken(accessToken);
     if (payload) {
@@ -72,9 +57,23 @@ app.use(async (req, res, next) => {
 });
 
 app.get('/', (req, res) => {
+    console.log(req.userId, req.user)
     if (req?.userId && req?.user) {
         return res.json({
             username: req?.user.username,
+            logout: 'http://localhost:3000/logout'
+        })
+    }
+    return res.sendFile(path.join("C:/Users/Lampa/Desktop/Безпека ПЗ/Лаб1/auth_examples/token_auth/" +'/index.html'));
+})
+
+app.get('/jwt', checkJwt, (req, res) => {
+    console.log("JWT TESTED", req.auth.payload.sub);
+    const foundUser = req?.auth?.payload?.sub && users.find((user) => user.id === req?.auth?.payload?.sub)
+
+    if (foundUser) {
+        return res.json({
+            username: foundUser.username,
             logout: 'http://localhost:3000/logout'
         })
     }
@@ -86,7 +85,7 @@ app.get('/logout', (req, res) => {
 });
 
 app.post('/api/login', async (req, res) => {
-    const { login, password } = req.body;
+    const { code } = req.body;
 
     try {
         const {access_token, expires_in} = await auth(login, password);
